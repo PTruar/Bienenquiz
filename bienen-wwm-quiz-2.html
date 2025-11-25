@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Wer wird Bienen-Millionär?</title>
+<style>
+body{background:#fbbf24;font-family:sans-serif;padding:20px;}
+.game{background:#111827;color:white;max-width:900px;margin:auto;padding:20px;border-radius:16px;}
+h1{text-align:center;margin-top:0;}
+p{margin:4px 0;}
+.answers{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:15px 0;}
+@media (max-width:700px){.answers{grid-template-columns:1fr;}}
+.answer{padding:10px;border-radius:30px;border:2px solid #666;cursor:pointer;background:#222;color:#eee;text-align:left;}
+.answer.correct{background:#15803d;}
+.answer.wrong{background:#b91c1c;}
+.answer.selected{background:#1d4ed8;}
+.answer.disabled{opacity:0.4;border-style:dashed;cursor:default;}
+button{padding:10px 16px;border:none;border-radius:30px;background:#fbbf24;font-weight:bold;cursor:pointer;}
+button:disabled{opacity:0.5;cursor:default;}
+.controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+.controls button{flex-shrink:0;}
+.controls span{flex:1 1 auto;}
+#questionNumber{margin-top:10px;font-weight:bold;}
+#questionText{margin-top:4px;}
+</style>
+</head>
+<body>
+<div class="game">
+<h1>Wer wird Bienen-Millionär?</h1>
+<p>Quiz: Honigbiene &amp; Imkerei</p>
+<div id="questionNumber"></div>
+<div id="questionText"></div>
+<div class="answers" id="answersContainer"></div>
+<div class="controls">
+  <span id="statusText"></span>
+  <button id="jokerBtn">50:50-Joker</button>
+  <button id="nextBtn">Antwort prüfen</button>
+</div>
+<p id="moneyDisplay">Gewinn: 0 €</p>
+</div>
+
+<script>
+// Fragen nach Schwierigkeit sortiert (leicht -> schwer), Texte wie in der PDF
+const questions = [
+  {
+    text: "Was sind Bienen?",
+    answers: [
+      "ein Baby",
+      "ein Haus",
+      "Ein Insekt",
+      "Ein Tier das nicht den Winter überleben kann"
+    ],
+    correctIndex: 2,
+    value: 50
+  },
+  {
+    text: "Welche Aufgaben haben Arbeiterinnen nicht?",
+    answers: [
+      "Waben putzen",
+      "Nektar sammeln",
+      "Brut füttern",
+      "Drohnen Zeugen?"
+    ],
+    correctIndex: 3,
+    value: 100
+  },
+  {
+    text: "Wie wird das Ei eine Königin?",
+    answers: [
+      "Sie wird demokratisch gewählt",
+      "Sie wird mit Gelee Royal gefüttert",
+      "Sie klaut der alten Königin, die Krone",
+      "Die dickste Biene wird zur Königin"
+    ],
+    correctIndex: 1,
+    value: 200
+  },
+  {
+    text: "Wie lange lebt eine Bienenkönigin?",
+    answers: [
+      "Ein halbes Jahr",
+      "Ein Jahr",
+      "Zwei Jahre",
+      "Bis zu fünf Jahre"
+    ],
+    correctIndex: 3,
+    value: 300
+  },
+  {
+    text: "Wie lange leben Sommerbienen?",
+    answers: [
+      "8 Tage",
+      "35 Tage",
+      "ein Jahr",
+      "ein Monat"
+    ],
+    correctIndex: 1,
+    value: 500
+  },
+  {
+    text: "Wie lange überlebt eine Winterbiene?",
+    answers: [
+      "neun Monate",
+      "3 Wochen",
+      "ein Jahr",
+      "zehn Monate"
+    ],
+    correctIndex: 0,
+    value: 750
+  },
+  {
+    text: "Wie viele Bienen leben in einem Bienenstock in der Hochsaison?",
+    answers: [
+      "30.000",
+      "60.000",
+      "100.000",
+      "80.000"
+    ],
+    correctIndex: 1,
+    value: 1000
+  },
+  {
+    text: "Wie viele Bienen leben in einem Bienenstock im Winter?",
+    answers: [
+      "500 - 1000",
+      "8000 - 12000",
+      "15000 - 25000",
+      "30000 - 40000"
+    ],
+    correctIndex: 1,
+    value: 2000
+  },
+  {
+    text: "Wie viele Eier legt eine Bienenkönigin pro Tag in der Hochsaison?",
+    answers: [
+      "500 - 600",
+      "1000 - 2000",
+      "2000 - 3000",
+      "4000 - 5000"
+    ],
+    correctIndex: 1,
+    value: 4000
+  },
+  {
+    text: "Wie viele Bienenarten gibt es in Deutschland?",
+    answers: [
+      "rund 560",
+      "rund 35",
+      "rund 640",
+      "rund 1250"
+    ],
+    correctIndex: 0,
+    value: 8000
+  },
+  {
+    text: "Seit wann gibt es Bienen?",
+    answers: [
+      "200-300 Jahre",
+      "52 Millionen Jahre",
+      "20 Jahre",
+      "500 Million Jahre"
+    ],
+    correctIndex: 1,
+    value: 16000
+  },
+  {
+    text: "Welche Blumen locken Bienen nicht an?",
+    answers: [
+      "Geranien, Begonien, Stiefmütterchen und Petunien",
+      "Gänseblümchen, Lavendel, Salbei",
+      "Katzenminze, Krokusse",
+      "Kornblumen, Sonnenblumen"
+    ],
+    correctIndex: 0,
+    value: 32000
+  }
+];
+
+const prefixes = ["A","B","C","D"];
+
+let idx = 0;
+let selected = null;
+let locked = false;
+let money = 0;
+let jokerUsed = false;
+
+const qNum = document.getElementById("questionNumber");
+const qText = document.getElementById("questionText");
+const ans = document.getElementById("answersContainer");
+const status = document.getElementById("statusText");
+const next = document.getElementById("nextBtn");
+const joker = document.getElementById("jokerBtn");
+const moneyEl = document.getElementById("moneyDisplay");
+
+function shuffle(array){
+  for(let i = array.length - 1; i > 0; i--){
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+  return array;
+}
+
+function load(){
+  locked = false;
+  selected = null;
+  const q = questions[idx];
+  qNum.textContent = "Frage " + (idx+1) + " von " + questions.length;
+  qText.textContent = q.text;
+  ans.innerHTML = "";
+  q.answers.forEach((a,i)=>{
+    const b = document.createElement("button");
+    b.className = "answer";
+    b.innerHTML = "<b>" + prefixes[i] + ":</b> " + a;
+    b.onclick = () => {
+      if(locked || b.classList.contains("disabled")) return;
+      selected = i;
+      document.querySelectorAll(".answer").forEach(x => x.classList.remove("selected"));
+      b.classList.add("selected");
+    };
+    ans.appendChild(b);
+  });
+  status.textContent = "";
+  next.textContent = "Antwort prüfen";
+  joker.disabled = jokerUsed;
+}
+
+function applyJoker(){
+  if(jokerUsed || locked) return;
+  const q = questions[idx];
+  const buttons = document.querySelectorAll(".answer");
+  const wrongIndexes = [];
+  for(let i = 0; i < buttons.length; i++){
+    if(i !== q.correctIndex) wrongIndexes.push(i);
+  }
+  shuffle(wrongIndexes);
+  const toDisable = wrongIndexes.slice(0,2);
+  toDisable.forEach(i=>{
+    const btn = buttons[i];
+    btn.classList.add("disabled");
+    btn.disabled = true;
+  });
+  jokerUsed = true;
+  joker.disabled = true;
+}
+
+function check(){
+  if(selected === null){
+    status.textContent = "Bitte Antwort wählen.";
+    return;
+  }
+  locked = true;
+  const q = questions[idx];
+  const buttons = document.querySelectorAll(".answer");
+  buttons[q.correctIndex].classList.add("correct");
+  if(selected === q.correctIndex){
+    money += q.value;
+    status.textContent = "Richtig! +" + q.value + " €";
+  } else {
+    buttons[selected].classList.add("wrong");
+    status.textContent = "Falsch!";
+  }
+  moneyEl.textContent = "Gewinn: " + money + " €";
+  next.textContent = idx < questions.length - 1 ? "Nächste Frage" : "Neu starten";
+}
+
+next.onclick = () => {
+  if(!locked) {
+    check();
+  } else {
+    if(idx < questions.length - 1){
+      idx++;
+      load();
+    } else {
+      idx = 0;
+      money = 0;
+      moneyEl.textContent = "Gewinn: 0 €";
+      jokerUsed = false;
+      load();
+    }
+  }
+};
+
+joker.onclick = applyJoker;
+
+load();
+</script>
+</body>
+</html>
